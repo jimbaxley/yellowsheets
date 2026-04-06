@@ -3,6 +3,13 @@ import puppeteer from "@cloudflare/puppeteer";
 export default {
   // Runs daily at 8AM EST (13:00 UTC) via cron trigger
   async scheduled(event, env, ctx) {
+    const webhookUrl =
+      "https://coda.io/apis/v1/docs/OySK5JOQh-/hooks/automation/grid-auto-92m6frzljw";
+    const webhookHeaders = {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${env.CODA_API_TOKEN}`,
+    };
+
     const browser = await puppeteer.launch(env.BROWSER);
     try {
       const page = await browser.newPage();
@@ -20,7 +27,21 @@ export default {
       await env.BUCKET.put("YELLOWSHEET.PDF", pdf, {
         httpMetadata: { contentType: "application/pdf" },
       });
-      console.log("YELLOWSHEET.PDF saved to R2 at", new Date().toISOString());
+      const timestamp = new Date().toISOString();
+      console.log("YELLOWSHEET.PDF saved to R2 at", timestamp);
+
+      await fetch(webhookUrl, {
+        method: "POST",
+        headers: webhookHeaders,
+        body: JSON.stringify({ status: `PDF generated successfully at ${timestamp}` }),
+      });
+    } catch (err) {
+      await fetch(webhookUrl, {
+        method: "POST",
+        headers: webhookHeaders,
+        body: JSON.stringify({ status: `PDF generation failed - ${err.message}` }),
+      });
+      throw err;
     } finally {
       await browser.close();
     }
